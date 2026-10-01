@@ -56,6 +56,7 @@
   .enlace { color: var(--verde); background: none; border: 0; padding: 0; font: inherit; text-decoration: underline; cursor: pointer; }
   .cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
   .cabecera .chip { margin-top: 8px; color: var(--verde); border-color: var(--verde); font-weight: 600; }
+  .version { margin-top: 28px; text-align: center; font-size: .75rem; color: var(--suave); }
   #acceso { margin-top: 12px; text-align: center; }
   #acceso p { margin: 0; color: var(--suave); font-size: .9rem; }
   #boton-google { display: flex; justify-content: center; margin-top: 10px; min-height: 44px; }
@@ -103,6 +104,7 @@
           <div class="aviso">Esta variedad todavía no está en el catálogo. Elegí su temporada de siembra para agregarla.</div>
           <label for="i-temporada">Temporada de siembra</label>
           <select id="i-temporada"></select>
+          <div id="i-error" class="aviso error oculto"></div>
         </div>
         <label for="i-gramos">Gramos</label>
         <input id="i-gramos" type="number" min="0" step="any" inputmode="decimal" required>
@@ -129,6 +131,7 @@
         <select id="p-lote" required></select>
         <label for="p-gramos">Gramos que se retiran</label>
         <input id="p-gramos" type="number" min="0" step="any" inputmode="decimal" required>
+        <div id="p-error" class="aviso error oculto"></div>
         <label for="p-familia">Familia o persona que retira</label>
         <input id="p-familia" list="lista-familias" required>
         <datalist id="lista-familias"></datalist>
@@ -177,6 +180,8 @@
       <button class="boton" id="l-otro" type="button">Cargar otro</button>
       <button class="boton secundario" id="l-ver" type="button">Ver la biblioteca</button>
     </section>
+
+    <p class="version">Versión 3</p>
   </div>
 </div>
 
@@ -401,10 +406,21 @@
     return '<p>Escribí este código en el sobre:</p><div class="codigo">' + esc(codigo) + '</div>';
   }
 
+  // Muestra (o borra, con texto vacío) el motivo por el que un formulario no avanza
+  function falta(idAviso, texto, idCampo) {
+    $(idAviso).textContent = texto;
+    $(idAviso).classList.toggle('oculto', !texto);
+    if (texto && idCampo) $(idCampo).focus();
+  }
+
   $('form-ingreso').addEventListener('submit', function (ev) {
     ev.preventDefault();
     var existe = revisarVariedad();
-    if (!existe && !$('i-temporada').value) { $('i-temporada').focus(); return; }
+    if (!existe && !$('i-temporada').value) {
+      falta('i-error', 'Falta elegir la temporada de siembra de esta variedad nueva.', 'i-temporada');
+      return;
+    }
+    falta('i-error', '');
     var c = {
       especie: $('i-especie').value.trim(), variedad: $('i-variedad').value.trim(),
       temporada: existe ? '' : $('i-temporada').value, gramos: $('i-gramos').value,
@@ -424,16 +440,17 @@
   $('form-prestamo').addEventListener('submit', function (ev) {
     ev.preventDefault();
     var lote = DATOS.lotes.filter(function (l) { return l.codigo === $('p-lote').value; })[0];
-    if (!lote) { $('p-lote').focus(); return; }
+    if (!lote) { falta('p-error', 'Falta elegir el lote del que se retira la semilla.', 'p-lote'); return; }
     var c = {
       lote: lote.codigo, gramos: $('p-gramos').value, familia: $('p-familia').value.trim(),
       fecha: $('p-fecha').value, obs: $('p-obs').value.trim()
     };
     if (Number(c.gramos) > lote.disponible) {
-      $('p-gramos').setCustomValidity('El lote tiene ' + gramos(lote.disponible) + ' disponibles.');
-      $('p-gramos').reportValidity();
+      falta('p-error', 'No alcanza el stock: el lote ' + lote.codigo + ' tiene ' + gramos(lote.disponible) +
+        ' disponibles y se quieren retirar ' + gramos(c.gramos) + '. Corregí la cantidad o elegí otro lote.', 'p-gramos');
       return;
     }
+    falta('p-error', '');
     confirmar('Préstamo de semillas', [
       ['Especie', lote.especie], ['Variedad', lote.variedad], ['Lote', lote.codigo],
       ['Gramos', gramos(c.gramos)], ['Retira', c.familia], ['Fecha', c.fecha.split('-').reverse().join('/')],
@@ -481,7 +498,10 @@
   $('i-especie').addEventListener('input', revisarVariedad);
   $('i-variedad').addEventListener('input', revisarVariedad);
   $('p-variedad').addEventListener('change', lotesDeVariedad);
-  $('p-gramos').addEventListener('input', function () { $('p-gramos').setCustomValidity(''); });
+  ['p-gramos', 'p-lote', 'p-variedad'].forEach(function (id) {
+    $(id).addEventListener('input', function () { falta('p-error', ''); });
+  });
+  $('i-temporada').addEventListener('input', function () { falta('i-error', ''); });
   $('lista-prestamos').addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-fila]');
     if (!b) return;
